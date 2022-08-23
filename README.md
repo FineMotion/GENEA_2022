@@ -24,3 +24,4 @@ and for short sequences which allows teacher-forcing and zeroing techniques
 - `seq2seq` - sequence-to-sequence model from https://github.com/FineMotion/GENEA_2020
 - `seqae` - unfinished autoencoder for sequences, has not been used
 - `wav2gest` - modification of `seq2seq` allowing different lengths for input and output sequences 
+- `auto-encoder` - windowed auto-encoder
