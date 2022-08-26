@@ -25,6 +25,7 @@ class SystemSelector:
         parser.add_argument('--frames_count', type=int, default=3)
         parser.add_argument('--output_dim', type=int, default=60)
         parser.add_argument('--hidden_dim', type=int, default=512)
+        parser.add_argument('--norm_mode', type=str, choices=['min', 'mean'], default='min')
         return parser
 
     def __init__(self, **kwargs):
@@ -46,19 +47,25 @@ class SystemSelector:
         # unpack kwargs to initialize datamodule
         trn_folder = self.kwargs['trn_folder']
         val_folder = self.kwargs['val_folder']
+        serialize_dir = self.kwargs['serialize_dir']
         batch_size = self.kwargs['batch_size']
+        norm_mode = self.kwargs['norm_mode']
 
-        self.initialize_datamodule(trn_folder=trn_folder, val_folder=val_folder, batch_size=batch_size)
+        self.initialize_datamodule(trn_folder=trn_folder, val_folder=val_folder, serialize_dir=serialize_dir,
+                                   batch_size=batch_size, norm_mode=norm_mode)
 
     def initialize_system(self, input_dim: int = 164, frames_count: int = 3, output_dim: int = 60,
                           hidden_dim: int = 512):
         self.system = AutoEncoderSystem(input_dim, frames_count, output_dim, hidden_dim)
 
-    def initialize_datamodule(self, trn_folder: str, val_folder: str, batch_size: int = 128):
+    def initialize_datamodule(self, trn_folder: str, val_folder: str, serialize_dir: str,
+                              batch_size: int = 128, norm_mode: str = "min"):
         base_kwargs = {
             'trn_folder': trn_folder,
             'val_folder': val_folder,
-            'batch_size': batch_size
+            'serialize_dir': serialize_dir,
+            'batch_size': batch_size,
+            'norm_mode': norm_mode
         }
 
         self.datamodule = AutoEncoderDataModule(**base_kwargs)

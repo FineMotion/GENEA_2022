@@ -10,19 +10,31 @@ import joblib as jl
 
 from pymo.writers import BVHWriter
 from src.utils.smoothing import smoothing
-from src.utils.normalization import denormalize_data
 
 
 class Predictor:
-    def __init__(self, model_name, input_dim, output_dim, window_size):
+    def __init__(self, model_name, input_dim, output_dim, window_size, auto_enc, auto_enc_out_path=None,
+                 frames_to_encoder=3, auto_enc_path=None, auto_enc_dim=None):
         self.model_name = model_name
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.window_size = window_size
+        self.auto_enc = auto_enc
+        self.auto_enc_path = auto_enc_path
+        self.auto_enc_dim = auto_enc_dim
+        self.auto_enc_out_path = auto_enc_out_path
+        self.frames_to_encoder = frames_to_encoder
         self.system = None  # type: pl.LightningModule
         self.dataset = None  # type: Dataset
+        self.auto_enc_dataset = None  # type: pl.LightningModule
+        self.auto_enc_system = None  # type: Dataset
 
     def initialize_models(self, checkpoint_path, data_path):
+        if self.auto_enc:
+            from src.auto_encoder.utils import encode_files
+            encode_files(data_path, self.auto_enc_path, self.auto_enc_out_path, self.frames_to_encoder)
+            data_path = self.auto_enc_out_path
+
         if self.model_name == 'feedforward':
             from src.feedforward import FeedforwardSystem, FeedforwardDataset
             self.system = FeedforwardSystem(in_features=self.input_dim, out_features=self.output_dim)
@@ -90,34 +102,39 @@ if __name__ == '__main__':
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--src", type=str, required=True, help="Path to input npz file with audio data")
     parser.add_argument("--dst", type=str, required=True, help="Path to store result npy with generated motion")
+    parser.add_argument("--auto_enc", action="store_true")
     parser.add_argument("--model", type=str, choices=['wav2gest', 'recell', 'feedforward', 'seq2seq', 'lstm'])
     # defaults
     parser.add_argument("--input_dim", type=int, default=26)
     parser.add_argument("--output_dim", type=int, default=164)
+    parser.add_argument("--auto_enc_dim", type=int, required=False, default=60)
+    parser.add_argument('--frames_count', type=int, required=False, default=3)
+    parser.add_argument("--auto_enc_path", type=str, required=False, default=None, help="Path to auto-encoder "
+                                                                                        "checkpoint")
+    parser.add_argument("--auto_enc_out_path", type=str, required=False, default=None, help="Path to auto-encoder "
+                                                                                            "output")
     parser.add_argument("--pipeline_dir", type=str, default='./pipe_v1')
     parser.add_argument("--window_size", type=int, default=61)
     args = parser.parse_args()
 
     # predict via network
-    predictor = Predictor(args.model, args.input_dim, args.output_dim, args.window_size)
+    predictor = Predictor(args.model, args.input_dim, args.output_dim, args.window_size,
+                          args.auto_enc, args.auto_enc_out_path, args.frames_to_encoder,
+                          args.auto_enc_path, args.auto_enc_dim)
     predictor.initialize_models(args.checkpoint, args.src)
     predictions = predictor.predict()
+
+    if args.auto_enc:
+        from src.auto_encoder.utils import decode_pred
+        predictions = decode_pred(predictions, args.auto_enc_path)
 
     # smooth predictions
     smoothed = smoothing(predictions)
 
-    # denormalize
-    pipeline_dir = Path(args.pipeline_dir)
-    normalization_values = pipeline_dir / 'normalization_values.npz'
-    assert normalization_values.exists()
-    normalization_data = np.load(normalization_values)
-    max_val, mean_val = normalization_data['max_val'], normalization_data['mean_val']
-    normalized = denormalize_data(smoothed, max_val, mean_val)
-
     # make bvh
-    pipeline_path = pipeline_dir / 'data_pip.sav'
+    pipeline_path = Path(args.pipeline_dir) / 'data_pip.sav'
     pipeline = jl.load(str(pipeline_path))  # type: Pipeline
-    bvh_data = pipeline.inverse_transform([normalized])
+    bvh_data = pipeline.inverse_transform([smoothed])
     bvh_writer = BVHWriter()
     with open(args.dst, 'w') as f:
         bvh_writer.write(bvh_data[0], f)

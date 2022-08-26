@@ -1,10 +1,11 @@
 import torch
 from torch.nn import MSELoss
 import pytorch_lightning as pl
-import numpy as np
 from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
+import os
 
+from .utils import *
 from .dataset import AutoEncoderDataset
 from .model import Encoder, Decoder
 
@@ -40,35 +41,28 @@ class AutoEncoderSystem(pl.LightningModule):
 
 
 class AutoEncoderDataModule(pl.LightningDataModule):
-    def __init__(self, trn_data_path, val_data_path, batch_size: int = 128):
+    def __init__(self, trn_data_path, val_data_path, serialize_dir, batch_size: int = 128, norm_mode="min"):
         super().__init__()
         self.val_dataset = None
         self.trn_dataset = None
 
-        trn_samples = list(trn_data_path.glob('*.npy'))
-        val_samples = list(val_data_path.glob('*.npy'))
+        assert norm_mode in ["min", "mean"]
 
-        trn_processed_samples = []
-        val_processed_samples = []
+        self.train_data = get_data_by_file(trn_data_path)
+        self.val_data = get_data_by_file(val_data_path)
 
-        for i, sample in tqdm(trn_samples):
-            trn_processed_samples.append(np.load(sample))
-
-        for sample in tqdm(val_samples):
-            val_processed_samples.append(np.load(sample))
-
-        self.train_data = np.concatenate(trn_processed_samples)
-        self.val_data = np.concatenate(val_processed_samples)
-
-        min_train = self.train_data.min(axis=0)
+        min_train = self.train_data.min(axis=0) if norm_mode == "min" else self.train_data.mean(axis=0)
         max_train = self.train_data.max(axis=0)
 
         self.min_train = min_train
         self.max_train = max_train
 
-        # min-max normalization
-        self.train_data = (self.train_data - min_train) / (max_train - min_train)
-        self.val_data = (self.val_data - min_train) / (max_train - min_train)
+        with open(os.path.join(serialize_dir, 'min_max.txt'), 'w') as f:
+            f.write(str(self.min_train) + " " + str(self.max_train))
+
+        # min-max (mean-max) normalization
+        self.train_data = normalize(self.train_data, min_train, max_train)
+        self.val_data = normalize(self.val_data, min_train, max_train)
 
         self.batch_size = batch_size
 
