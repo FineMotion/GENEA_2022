@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src.base import BaseDataModule
 from src.recell.model import ReCellModel
 from src.recell.dataset_seq import ReCellSeqDataset
-import random
+import numpy as np
 
 
 class ReCellSeqSystem(pl.LightningModule):
@@ -34,19 +34,16 @@ class ReCellSeqSystem(pl.LightningModule):
         for i in range(y.shape[0]):
             pred = self.model(x[i], h)
             preds.append(pred)
-            tf = random.random()
-            if tf > 0.8:
-                if self.current_epoch < 10:
-                    h = h.new_zeros(h.shape)
-                else:
-                    h = y[i]
+            is_zeros = np.random.binomial(1, 0.5)
+            is_y = np.random.binomial(1, 0.5)
+
+            # here we can make h = 0, h = pred, h = y[i]
+            if self.current_epoch < 10 and is_zeros:
+                h = h.new_zeros(h.shape)
+            elif self.current_epoch >= 10 and is_y:
+                h = y[i]
             else:
                 h = pred
-            # here we can make h = 0, h = pred, h = y[i]
-            # if self.current_epoch < 10:
-            #     h = h.new_zeros(h.shape)
-            # else:
-            #     h = pred
 
         preds = torch.stack(preds, dim=0)
         loss = self.custom_loss(preds, y, 'train')

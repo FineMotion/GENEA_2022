@@ -10,10 +10,10 @@ from .model import Encoder, Decoder
 
 
 class AutoEncoderSystem(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, input_dim, frames_count, output_dim, hidden_dim):
         super(AutoEncoderSystem, self).__init__()
-        self.encoder = Encoder().double()
-        self.decoder = Decoder().double()
+        self.encoder = Encoder(input_dim, frames_count, output_dim, hidden_dim).double()
+        self.decoder = Decoder(input_dim, frames_count, output_dim, hidden_dim).double()
         self.loss = MSELoss()
 
     def forward(self, x):
