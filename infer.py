@@ -10,6 +10,7 @@ import joblib as jl
 
 from pymo.writers import BVHWriter
 from src.utils.smoothing import smoothing
+from src.utils.normalization import denormalize_data
 
 
 class Predictor:
@@ -54,7 +55,7 @@ class Predictor:
         elif self.model_name == 'wav2gest':
             from src.wav2gest import Wav2GestSystem, Wav2GestDataset
             self.system = Wav2GestSystem(input_dim=self.input_dim, output_dim=self.output_dim)
-            self.dataset = Wav2GestDataset([data_path], stride=60)
+            self.dataset = Wav2GestDataset([data_path], stride=30)
         assert self.system is not None
         assert self.dataset is not None
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
@@ -113,6 +114,7 @@ if __name__ == '__main__':
                                                                                         "checkpoint")
     parser.add_argument("--auto_enc_out_path", type=str, required=False, default=None, help="Path to auto-encoder "
                                                                                             "output")
+    parser.add_argument("--frames_to_encoder", type=str, required=False, default=3, help="Number of frames to encode")
     parser.add_argument("--pipeline_dir", type=str, default='./pipe_v1')
     parser.add_argument("--window_size", type=int, default=61)
     args = parser.parse_args()
@@ -124,17 +126,23 @@ if __name__ == '__main__':
     predictor.initialize_models(args.checkpoint, args.src)
     predictions = predictor.predict()
 
+    pipeline_dir = Path(args.pipeline_dir)
     if args.auto_enc:
         from src.auto_encoder.utils import decode_pred
         predictions = decode_pred(predictions, args.auto_enc_path)
-
-    # smooth predictions
-    smoothed = smoothing(predictions)
+        predictions = smoothing(predictions)
+    else:
+        normalization_values = pipeline_dir / 'normalization_values.npz'
+        assert normalization_values.exists()
+        predictions = smoothing(predictions)
+        normalization_data = np.load(normalization_values)
+        max_val, mean_val = normalization_data['max_val'], normalization_data['mean_val']
+        predictions = denormalize_data(predictions, max_val, mean_val)
 
     # make bvh
     pipeline_path = Path(args.pipeline_dir) / 'data_pip.sav'
     pipeline = jl.load(str(pipeline_path))  # type: Pipeline
-    bvh_data = pipeline.inverse_transform([smoothed])
+    bvh_data = pipeline.inverse_transform([predictions])
     bvh_writer = BVHWriter()
     with open(args.dst, 'w') as f:
         bvh_writer.write(bvh_data[0], f)

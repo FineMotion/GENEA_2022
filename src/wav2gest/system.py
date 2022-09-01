@@ -32,13 +32,13 @@ class Wav2GestSystem(pl.LightningModule):
         mse_loss = self.mse(output, target)
         self.log(f'{stage}/mse_loss', mse_loss)
 
-        output_velocity = output[:, 1:, :] - output[:, :-1, :]
-        target_velocity = target[:, 1:, :] - target[:, :-1, :]
-        velocity_loss = self.mse(output_velocity, target_velocity)
-        self.log(f'{stage}/velocity_loss', velocity_loss)
+        # output_velocity = output[:, 1:, :] - output[:, :-1, :]
+        # target_velocity = target[:, 1:, :] - target[:, :-1, :]
+        # velocity_loss = self.mse(output_velocity, target_velocity)
+        # self.log(f'{stage}/velocity_loss', velocity_loss)
 
-        loss = mse_loss + 0.6 * velocity_loss
-
+        # loss = mse_loss + 0.6 * velocity_loss
+        loss = mse_loss
         self.log(f'{stage}/loss', loss)
 
         return loss
